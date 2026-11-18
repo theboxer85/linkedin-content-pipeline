@@ -17,6 +17,10 @@ concurrency:
   group: metrics
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   remind:
     if: github.event_name != 'issues'

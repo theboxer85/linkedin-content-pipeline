@@ -24,6 +24,10 @@ concurrency:
   group: draft
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   draft:
     runs-on: ubuntu-latest

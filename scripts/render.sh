@@ -21,6 +21,11 @@ for folder in "$@"; do
     args=(-x -f png --border 40 -s 1 -o "/data/$out" "/data/$src")
   fi
   echo "render $src -> $out"
-  docker run --rm -v "$PWD:/data" -w /data "$IMAGE" "${args[@]}"
+  set +e
+  docker run --rm -v "$PWD:/data" -w /data -e DRAWIO_DISABLE_UPDATE=true "$IMAGE" "${args[@]}"
+  rc=$?
+  set -e
+  echo "drawio exit code: $rc"
+  ls -la "$folder"
   [ -s "$out" ] || { echo "render produced no output for $src" >&2; exit 1; }
 done
