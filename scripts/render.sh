@@ -15,16 +15,16 @@ for folder in "$@"; do
   fmt=$(sed -n 's/^format:[[:space:]]*//p' "$folder/post.md" | head -1 | tr -d '"')
   if [ "$fmt" = "document" ]; then
     out="$folder/carousel.pdf"
-    args=(-x -f pdf -a -o "/data/$out" "/data/$src")
+    args=(-x -f pdf -a -o "$out" "$src")
   else
     out="$folder/diagram.png"
-    args=(-x -f png --border 40 -s 1 -o "/data/$out" "/data/$src")
+    args=(-x -f png -o "$out" "$src")
   fi
   echo "render $src -> $out"
   set +e
-  # draw.io Desktop must run as a non-root user with a writable HOME (required since v24.4.6).
-  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v /etc/passwd:/etc/passwd:ro \
-    -v "$PWD:/data" -w /data -e DRAWIO_DISABLE_UPDATE=true -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=120s \
+  # Keep the call minimal: extra flags (--border, --scale) and absolute paths made draw.io hang in CI.
+  # Each diagram has a full-page white background shape, so the export is always 1080 x 1350.
+  timeout 300 docker run --rm -v "$PWD:/data" -w /data -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=240s \
     "$IMAGE" "${args[@]}"
   rc=$?
   set -e
