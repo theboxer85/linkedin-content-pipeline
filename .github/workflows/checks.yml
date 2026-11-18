@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: checks-${{ github.head_ref }}
@@ -18,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -40,7 +41,8 @@ jobs:
       - name: Render diagrams
         if: steps.changed.outputs.folders != ''
         run: |
-          bash scripts/render.sh ${{ steps.changed.outputs.folders }}
+          mkdir -p .work
+          bash scripts/render.sh ${{ steps.changed.outputs.folders }} 2>&1 | tee .work/render.log
           if [ -n "$(git status --porcelain posts/)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -57,4 +59,20 @@ jobs:
         run: |
           args=""
           for f in ${{ steps.changed.outputs.folders }}; do args="$args ../$f"; done
-          python validate_post.py $args
+          python validate_post.py $args 2>&1 | tee ../.work/validate.log
+
+      - name: Explain a failure on the PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "**Checks failed.** Details from this run:"
+            echo
+            for f in .work/render.log .work/validate.log; do
+              [ -s "$f" ] || continue
+              echo "\`$f\`"; echo '```'; tail -40 "$f"; echo '```'
+            done
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > .work/comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file .work/comment.md
