@@ -61,18 +61,29 @@ jobs:
           for f in ${{ steps.changed.outputs.folders }}; do args="$args ../$f"; done
           python validate_post.py $args 2>&1 | tee ../.work/validate.log
 
-      - name: Explain a failure on the PR
-        if: failure()
+      - name: Report on the PR
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          FOLDERS: ${{ steps.changed.outputs.folders }}
+          OUTCOME: ${{ job.status }}
         run: |
+          mkdir -p .work
+          sha=$(git rev-parse HEAD)
           {
-            echo "**Checks failed.** Details from this run:"
+            if [ "$OUTCOME" = "success" ]; then echo "**Checks passed.**"; else echo "**Checks failed.**"; fi
             echo
-            for f in .work/render.log .work/validate.log; do
-              [ -s "$f" ] || continue
-              echo "\`$f\`"; echo '```'; tail -40 "$f"; echo '```'
+            echo "Post folders checked: ${FOLDERS:-none}"
+            for f in $FOLDERS; do
+              for img in diagram.png; do
+                [ -f "$f/$img" ] && echo && echo "![${f##*/}](${{ github.server_url }}/${{ github.repository }}/blob/$sha/$f/$img?raw=true)"
+              done
+              [ -f "$f/carousel.pdf" ] && echo && echo "Carousel: ${{ github.server_url }}/${{ github.repository }}/blob/$sha/$f/carousel.pdf"
             done
-            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            for log in .work/render.log .work/validate.log; do
+              [ -s "$log" ] || continue
+              echo; echo "<details><summary>${log#.work/}</summary>"; echo; echo '```'; tail -40 "$log"; echo '```'; echo "</details>"
+            done
+            echo; echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } > .work/comment.md
           gh pr comment "${{ github.event.pull_request.number }}" --body-file .work/comment.md
