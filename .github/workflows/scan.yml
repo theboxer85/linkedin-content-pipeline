@@ -1,0 +1,69 @@
+name: Scan
+
+# Daily 12:00 UTC = 6 AM CST / 7 AM CDT. Pulls CSP announcements and subreddit posts,
+# lets Claude pick the few worth a post, and files them as idea issues.
+on:
+  schedule:
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Fetch sources
+        id: fetch
+        run: |
+          python scripts/fetch_sources.py
+          echo "count=$(python -c 'import json;print(len(json.load(open(".work/digest.json"))))')" >> "$GITHUB_OUTPUT"
+
+      - name: Claude triages
+        if: steps.fetch.outputs.count != '0'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Task: triage-scan. Follow CLAUDE.md exactly. Input is .work/digest.json; write .work/new_ideas.json.
+          claude_args: >-
+            --model sonnet
+            --max-turns 15
+            --allowedTools "Read,Write,Glob,Grep"
+
+      - name: File idea issues
+        if: steps.fetch.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/create_issues.py
+
+      - name: Remember what was seen
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain data/seen.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/seen.json
+            git commit -m "Scan: update seen items"
+            git pull --rebase
+            git push
+          fi

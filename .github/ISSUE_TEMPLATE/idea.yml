@@ -1,0 +1,38 @@
+name: Idea
+description: A scenario or topic for a future post. Sanitize before filing.
+title: "Idea: "
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sanitize first: no client names (use Contoso, Fabrikam, Northwind Traders), no people, no client IPs or hostnames, no contract details, no incident dates. Change at least one of industry, location or scale.
+  - type: dropdown
+    id: pillar
+    attributes:
+      label: Pillar
+      options: [financial, adoption, continuity, not sure]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What broke or what's the topic
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Business impact (what it cost, who saw it)
+  - type: textarea
+    id: in_place
+    attributes:
+      label: What was in place / already ruled out
+  - type: textarea
+    id: root_cause
+    attributes:
+      label: Root cause (needed for a Thursday post)
+  - type: textarea
+    id: fix
+    attributes:
+      label: Fix and the evidence that confirmed it

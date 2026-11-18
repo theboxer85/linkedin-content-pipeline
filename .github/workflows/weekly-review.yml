@@ -1,0 +1,63 @@
+name: Weekly review
+
+# Friday 21:30 UTC = 3:30 PM CST / 4:30 PM CDT.
+on:
+  schedule:
+    - cron: "30 21 * * 5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Anything to review?
+        id: gate
+        run: |
+          rows=$(($(wc -l < data/scoreboard.csv) - 1))
+          echo "rows=$rows" >> "$GITHUB_OUTPUT"
+          mkdir -p .work
+
+      - name: Claude reviews the week
+        if: steps.gate.outputs.rows != '0'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Task: weekly-review. Follow CLAUDE.md exactly. Today is the Friday of the week under review.
+          claude_args: >-
+            --model opus
+            --max-turns 20
+            --allowedTools "Read,Write,Edit,Glob,Grep"
+
+      - name: Post the report
+        if: steps.gate.outputs.rows != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          week=$(date -u +%Y-%m-%d)
+          if [ ! -s .work/weekly_report.md ]; then
+            echo "The review run produced no report. See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > .work/weekly_report.md
+          fi
+          gh issue create --title "Weekly review $week" --label weekly-review --body-file .work/weekly_report.md
+          if [ -n "$(git status --porcelain data/learning.md)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git switch -c "review/$week"
+            git add data/learning.md
+            git commit -m "Learning: lesson from week of $week"
+            git push -u origin "review/$week"
+            gh pr create --base main --head "review/$week" --title "New rule from the $week review" \
+              --body "Proposed addition to data/learning.md. Merge to make it a rule future drafts follow."
+          fi

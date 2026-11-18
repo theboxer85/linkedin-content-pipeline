@@ -1,0 +1,76 @@
+name: Metrics
+
+# Daily 15:00 UTC: open Metrics issues for 24h / 7d reads that are due, and warn before the
+# LinkedIn token expires. Closing a Metrics issue copies its numbers into data/scoreboard.csv.
+on:
+  schedule:
+    - cron: "0 15 * * *"
+  issues:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: metrics
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Open due metrics issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LINKEDIN_TOKEN_EXPIRES: ${{ vars.LINKEDIN_TOKEN_EXPIRES }}
+        working-directory: scripts
+        run: python metrics.py remind
+      - name: Save issue numbers
+        run: |
+          if [ -n "$(git status --porcelain posts/)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add posts
+            git commit -m "Metrics: track reminder issues"
+            git pull --rebase
+            git push
+          fi
+
+  record:
+    if: github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'metrics')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Record numbers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: scripts
+        run: python metrics.py record "${{ github.event.issue.number }}"
+      - name: Commit scoreboard
+        run: |
+          if [ -n "$(git status --porcelain data/scoreboard.csv)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/scoreboard.csv
+            git commit -m "Scoreboard: issue #${{ github.event.issue.number }}"
+            git pull --rebase
+            git push
+          fi

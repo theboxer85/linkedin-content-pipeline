@@ -1,0 +1,4 @@
+# Monday pillar rotation, anchored on launch week.
+# Week of 2026-11-30 is continuity (the GCP DNS pair), then the cycle repeats.
+anchor_monday: "2026-11-30"
+cycle: [continuity, financial, adoption]

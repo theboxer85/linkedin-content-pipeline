@@ -1,0 +1,80 @@
+name: Publish
+
+# Every 15 minutes, Monday and Thursday, 12:00-15:59 UTC. That covers 7:45 AM Central in both
+# CST (13:45 UTC) and CDT (12:45 UTC). The script only publishes merged posts whose time has come.
+on:
+  schedule:
+    - cron: "*/15 12-15 * * 1,4"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Dry run (print what would be posted, change nothing)
+        type: boolean
+        default: true
+      post:
+        description: Only this post id (optional)
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Publish due posts
+        id: run
+        working-directory: scripts
+        env:
+          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+          LINKEDIN_PERSON_URN: ${{ vars.LINKEDIN_PERSON_URN }}
+          LINKEDIN_VERSION: ${{ vars.LINKEDIN_VERSION }}
+        run: |
+          args=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            [ "${{ inputs.dry_run }}" = "true" ] && args="--dry-run"
+            [ -n "${{ inputs.post }}" ] && args="$args --post ${{ inputs.post }}"
+          fi
+          python publish.py $args
+
+      - name: Save status changes
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain posts/)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add posts
+            git commit -m "Publish: update post status"
+            git push
+          fi
+
+      - name: Report problems
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f /tmp/publish_report.md ] || exit 0
+          cat /tmp/publish_report.md >> "$GITHUB_STEP_SUMMARY"
+          if grep -qE "^- (Failed|Skipped)" /tmp/publish_report.md; then
+            gh issue create --title "Publishing problem $(date -u +%Y-%m-%d)" --label publish-problem \
+              --body "$(cat /tmp/publish_report.md)
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi

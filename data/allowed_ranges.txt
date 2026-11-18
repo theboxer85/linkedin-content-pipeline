@@ -1,0 +1,6 @@
+# Public, documented provider ranges that may appear in posts. One CIDR or IP per line.
+35.199.192.0/19
+130.211.0.0/22
+35.191.0.0/16
+168.63.129.16
+169.254.169.254

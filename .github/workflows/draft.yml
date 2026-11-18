@@ -1,0 +1,143 @@
+name: Draft
+
+# Friday 20:00 UTC = 2 PM CST / 3 PM CDT -> Monday draft
+# Tuesday 23:00 UTC = 5 PM CST / 6 PM CDT -> Thursday draft
+on:
+  schedule:
+    - cron: "0 20 * * 5"
+    - cron: "0 23 * * 2"
+  workflow_dispatch:
+    inputs:
+      day:
+        description: Which slot to draft
+        type: choice
+        options: [monday, thursday]
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: draft
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Which slot
+        id: which
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "day=${{ inputs.day }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 20 * * 5" ]; then
+            echo "day=monday" >> "$GITHUB_OUTPUT"
+          else
+            echo "day=thursday" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Work out the slot
+        id: slot
+        working-directory: scripts
+        run: python next_slot.py "${{ steps.which.outputs.day }}"
+
+      - name: Check for an open draft PR
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SKIP: ${{ steps.slot.outputs.skip }}
+          SLOT: ${{ steps.slot.outputs.slot_date }}
+        run: |
+          open=$(gh pr list --state open --head "draft/$SLOT" --json number --jq length)
+          if [ -n "$SKIP" ]; then
+            echo "::notice::No draft for $SLOT: $SKIP"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          elif [ "$open" != "0" ]; then
+            echo "::notice::A draft PR for $SLOT is already open."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gather inputs
+        if: steps.gate.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DAY: ${{ steps.which.outputs.day }}
+          MONDAY_DIR: ${{ steps.slot.outputs.monday_dir }}
+          SLOT: ${{ steps.slot.outputs.slot_date }}
+        run: |
+          mkdir -p .work
+          gh issue list --label idea --state open --limit 50 --json number,title,body,labels > .work/ideas.json
+          echo '{}' > .work/source_issue.json
+          if [ "$DAY" = "thursday" ]; then
+            src=$(sed -n 's/^source_issue:[[:space:]]*//p' "posts/$MONDAY_DIR/post.md" | head -1)
+            if [ -n "$src" ] && [ "$src" != "0" ]; then
+              gh issue view "$src" --json number,title,body,comments > .work/source_issue.json
+            fi
+          fi
+          git switch -c "draft/$SLOT"
+
+      - name: Claude drafts the post
+        if: steps.gate.outputs.go == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Task: draft-${{ steps.which.outputs.day }}. Follow CLAUDE.md exactly, including every playbook file it lists.
+            SLOT_DATE=${{ steps.slot.outputs.slot_date }}
+            PILLAR=${{ steps.slot.outputs.pillar }}
+            MONDAY_DIR=posts/${{ steps.slot.outputs.monday_dir }}
+            Inputs are in .work/. Publish time is 07:45 America/Chicago on SLOT_DATE.
+          claude_args: >-
+            --model opus
+            --max-turns 40
+            --allowedTools "Read,Write,Edit,Glob,Grep"
+
+      - name: Open the PR (or report why not)
+        if: steps.gate.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLOT: ${{ steps.slot.outputs.slot_date }}
+          DAY: ${{ steps.which.outputs.day }}
+          SANITIZE_DENYLIST: ${{ secrets.SANITIZE_DENYLIST }}
+        run: |
+          if [ -f .work/no_draft.md ]; then
+            gh issue create --title "No $DAY draft for $SLOT" --label idea-needed --body-file .work/no_draft.md
+            exit 0
+          fi
+          folder=$(git status --porcelain --untracked-files=all posts/ | awk '{print $2}' | grep '/post.md$' | head -1 | xargs -r dirname)
+          if [ -z "$folder" ]; then
+            gh issue create --title "Draft run for $SLOT produced no post" --label idea-needed \
+              --body "The $DAY draft run finished without a post or an explanation. See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            exit 1
+          fi
+          (cd scripts && python validate_post.py "../$folder" --report ../.work/validation.md) || true
+          bash scripts/render.sh "$folder"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add posts
+          git commit -m "Draft: $(basename "$folder")"
+          git push -u origin "draft/$SLOT"
+          touch .work/pr_body.md
+          { cat .work/pr_body.md; echo; cat .work/validation.md 2>/dev/null; } > .work/pr_full.md
+          url=$(gh pr create --base main --head "draft/$SLOT" --title "Draft: $(basename "$folder")" \
+                  --label draft --body-file .work/pr_full.md)
+          if [ -s .work/used_issue.txt ]; then
+            issue=$(tr -dc '0-9' < .work/used_issue.txt)
+            [ -n "$issue" ] && gh issue comment "$issue" --body "Drafted in $url" && gh issue edit "$issue" --add-label used
+          fi
+          echo "::notice::Opened $url"

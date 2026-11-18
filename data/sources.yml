@@ -1,0 +1,14 @@
+feeds:
+  - name: Azure updates
+    url: https://www.microsoft.com/releasecommunications/api/v2/azure/rss
+  - name: AWS What's New
+    url: https://aws.amazon.com/about-aws/whats-new/recent/feed/
+  - name: GCP release notes
+    url: https://cloud.google.com/feeds/gcp-release-notes.xml
+subreddits:
+  - AZURE
+  - aws
+  - googlecloud
+  - networking
+# Only keep items whose title or summary mentions one of these (case-insensitive).
+keywords: [network, vnet, vpc, vwan, virtual wan, expressroute, direct connect, interconnect, vpn, bgp, dns, firewall, nat, egress, private link, private endpoint, privatelink, load balancer, gateway, peering, transit, route, cdn, front door, ddos, waf, zero trust, sase, ipv6, subnet]

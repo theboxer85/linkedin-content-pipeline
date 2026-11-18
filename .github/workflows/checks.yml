@@ -1,0 +1,60 @@
+name: Checks
+
+# Runs when you push edits to a draft PR: re-renders changed diagrams and re-checks the post.
+on:
+  pull_request:
+    paths:
+      - "posts/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: checks-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Find changed post folders
+        id: changed
+        run: |
+          folders=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- posts/ \
+                    | awk -F/ 'NF>=3 {print $1"/"$2}' | sort -u | while read -r f; do [ -f "$f/post.md" ] && echo "$f"; done | tr '\n' ' ')
+          echo "folders=$folders" >> "$GITHUB_OUTPUT"
+          echo "Changed: $folders"
+
+      - name: Render diagrams
+        if: steps.changed.outputs.folders != ''
+        run: |
+          bash scripts/render.sh ${{ steps.changed.outputs.folders }}
+          if [ -n "$(git status --porcelain posts/)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add posts
+            git commit -m "Render diagrams"
+            git push
+          fi
+
+      - name: Check posts against the playbook
+        if: steps.changed.outputs.folders != ''
+        env:
+          SANITIZE_DENYLIST: ${{ secrets.SANITIZE_DENYLIST }}
+        working-directory: scripts
+        run: |
+          args=""
+          for f in ${{ steps.changed.outputs.folders }}; do args="$args ../$f"; done
+          python validate_post.py $args
