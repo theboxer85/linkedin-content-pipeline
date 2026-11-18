@@ -82,6 +82,12 @@ def check_diagram(folder: pathlib.Path, meta: dict, errors: list, warnings: list
         if (model.get("pageWidth"), model.get("pageHeight")) != ("1080", "1350"):
             warnings.append(f"{folder.name}: diagram page is not 1080 x 1350.")
             break
+    for page in pages:
+        geos = [c.find("mxGeometry") for c in page.iter("mxCell") if c.get("vertex") == "1"]
+        first = geos[0] if geos else None
+        if first is None or (first.get("x", "0"), first.get("y", "0"), first.get("width"), first.get("height")) != ("0", "0", "1080", "1350"):
+            errors.append(f"{folder.name}: each diagram page must start with the 1080 x 1350 white background shape (playbook/04).")
+            break
 
 
 def validate(post_md: pathlib.Path) -> tuple[list, list]:

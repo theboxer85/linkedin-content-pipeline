@@ -10,7 +10,7 @@ Every post pairs text with a diagram. Monday shows the problem design, Thursday 
 ## Diagram rules
 
 - Each post folder holds `diagram.drawio` (uncompressed draw.io XML). The pipeline renders it to `diagram.png` (format `image`) or `carousel.pdf` (format `document`, one draw.io page per carousel page).
-- Portrait 4:5 canvas: 1080 × 1350 for every page.
+- Portrait 4:5 canvas: 1080 × 1350 for every page. The first shape on every page is a white background rectangle at x=0, y=0, 1080 × 1350, with no border (`strokeColor=none`). It keeps the export at full canvas size. Keep everything else inside it with at least 40px of margin.
 - Consistent style every time:
   - Background white. Title text 40px bold, dark gray `#1F2937`, top-left.
   - Cloud boundary: rounded rectangle, fill `#EFF6FF`, stroke `#2563EB`.
