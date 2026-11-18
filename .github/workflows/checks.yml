@@ -46,8 +46,6 @@ jobs:
         if: steps.changed.outputs.folders != ''
         run: |
           mkdir -p .work
-          bash scripts/render_debug.sh posts/2026-11-30-gcp-dns-return-path-mon/diagram.drawio > .work/render.log 2>&1 || true
-          exit 1
           bash scripts/render.sh ${{ steps.changed.outputs.folders }} 2>&1 | tee .work/render.log
           if [ -n "$(git status --porcelain posts/)" ]; then
             git config user.name "github-actions[bot]"
@@ -88,7 +86,7 @@ jobs:
             done
             for log in .work/render.log .work/validate.log; do
               [ -s "$log" ] || continue
-              echo; echo "<details><summary>${log#.work/}</summary>"; echo; echo '```'; tail -120 "$log"; echo '```'; echo "</details>"
+              echo; echo "<details><summary>${log#.work/}</summary>"; echo; echo '```'; tail -40 "$log"; echo '```'; echo "</details>"
             done
             echo; echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } > .work/comment.md
