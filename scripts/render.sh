@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
-# Render diagram.drawio in each given post folder.
-#   format image    -> diagram.png (first page)
+# Render diagram.drawio in each given post folder with draw.io's export server.
+#   format image    -> diagram.png (first page, 1080 x 1350)
 #   format document -> carousel.pdf (all pages, one per carousel page)
 # Usage: scripts/render.sh posts/<folder> [posts/<folder> ...]
-# Needs Docker (GitHub's ubuntu runners have it).
+# Needs Docker and curl (GitHub's ubuntu runners have both).
 set -euo pipefail
 
-IMAGE="rlespinasse/drawio-desktop-headless:latest"
+IMAGE="jgraph/export-server:latest"
+NAME="drawio-export-$$"
+PORT=8000
+
+cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+
+docker run -d --name "$NAME" -p "$PORT:8000" "$IMAGE" >/dev/null
+for _ in $(seq 1 60); do
+  code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT" || true)
+  [ "$code" != "000" ] && break
+  sleep 2
+done
 
 for folder in "$@"; do
   folder="${folder%/}"
@@ -15,20 +27,18 @@ for folder in "$@"; do
   fmt=$(sed -n 's/^format:[[:space:]]*//p' "$folder/post.md" | head -1 | tr -d '"')
   if [ "$fmt" = "document" ]; then
     out="$folder/carousel.pdf"
-    args=(-x -f pdf -a -o "$out" "$src")
+    extra=(-d format=pdf -d allPages=1)
   else
     out="$folder/diagram.png"
-    args=(-x -f png -o "$out" "$src")
+    extra=(-d format=png -d scale=1 -d border=0)
   fi
   echo "render $src -> $out"
-  set +e
-  # Keep the call minimal: extra flags (--border, --scale) and absolute paths made draw.io hang in CI.
-  # Each diagram has a full-page white background shape, so the export is always 1080 x 1350.
-  timeout 300 docker run --rm -v "$PWD:/data" -w /data -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=240s \
-    "$IMAGE" "${args[@]}"
-  rc=$?
-  set -e
-  echo "drawio exit code: $rc"
-  ls -la "$folder"
-  [ -s "$out" ] || { echo "render produced no output for $src" >&2; exit 1; }
+  status=$(curl -s -o "$out" -w "%{http_code}" --data-urlencode "xml@$src" "${extra[@]}" "http://localhost:$PORT")
+  echo "export server answered HTTP $status, $(wc -c < "$out") bytes"
+  if [ "$status" != "200" ] || [ ! -s "$out" ]; then
+    echo "render failed for $src" >&2
+    docker logs "$NAME" 2>&1 | tail -20 >&2
+    rm -f "$out"
+    exit 1
+  fi
 done
