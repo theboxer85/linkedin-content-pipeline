@@ -1,6 +1,6 @@
 # LinkedIn content pipeline
 
-Ideas go in as issues, Claude drafts posts as pull requests, you review and merge, and merged posts publish to LinkedIn on schedule. Nothing publishes without your merge.
+Ideas go in as issues, an agent drafts posts as pull requests, you review and merge, and merged posts publish to LinkedIn on schedule. Nothing publishes without your merge.
 
 ```
  ideas ──► draft PR ──► you review + merge ──► publishes at 7:45 AM CT ──► metrics issues ──► weekly review
@@ -13,12 +13,12 @@ The rules the agent follows are in [`playbook/`](playbook) and [`CLAUDE.md`](CLA
 
 | Workflow | When | What it does |
 | --- | --- | --- |
-| `scan.yml` | Daily ~6 AM | Pulls Azure, AWS and GCP announcements plus r/AZURE, r/aws, r/googlecloud, r/networking. Claude files at most 3 relevant ideas as issues. |
-| `draft.yml` | Fri ~2–3 PM, Tue ~5–6 PM | Claude picks an idea (Monday) or resolves Monday's post (Thursday), writes the post and diagram, and opens a PR with the rendered image, sources and a sanitizing checklist. |
+| `scan.yml` | Daily ~6 AM | Pulls Azure, AWS and GCP announcements plus r/AZURE, r/aws, r/googlecloud, r/networking. The agent files at most 3 relevant ideas as issues. |
+| `draft.yml` | Fri ~2–3 PM, Tue ~5–6 PM | The agent picks an idea (Monday) or resolves Monday's post (Thursday), writes the post and diagram, and opens a PR with the rendered image, sources and a sanitizing checklist. |
 | `checks.yml` | When you push edits to a draft PR | Re-renders the diagram and re-checks the post against the playbook rules. |
 | `publish.yml` | Mon and Thu mornings | Publishes merged posts whose time has come. A post more than 6 hours late is skipped, never posted at an odd hour. |
 | `metrics.yml` | Daily, and when you close a Metrics issue | Opens a Metrics issue 24 hours and 7 days after each post. Closing it writes the numbers to `data/scoreboard.csv`. Also warns a week before the LinkedIn token expires. |
-| `weekly-review.yml` | Fri ~3:30 PM | Claude writes the weekly review as an issue, and proposes new rules for `data/learning.md` as a PR. |
+| `weekly-review.yml` | Fri ~3:30 PM | The agent writes the weekly review as an issue, and proposes new rules for `data/learning.md` as a PR. |
 
 ## Your weekly routine
 
@@ -37,7 +37,7 @@ Don't merge a PR whose Checks are red, or that still has `[[NEEDS: ...]]` placeh
 
 Settings → Actions → General → Workflow permissions: choose **Read and write permissions** and tick **Allow GitHub Actions to create and approve pull requests**.
 
-### 2. Claude credential for Actions
+### 2. Agent credential for Actions
 
 On your laptop:
 
@@ -46,7 +46,7 @@ claude setup-token
 gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo theboxer85/linkedin-content-pipeline
 ```
 
-Paste the token when `gh` asks. This uses your Claude subscription.
+Paste the token when `gh` asks.
 
 ### 3. LinkedIn app (about 10 minutes)
 
@@ -68,7 +68,7 @@ It opens LinkedIn, you approve, and it saves the token and your member id to the
 
 Add a secret `SANITIZE_DENYLIST` with real client names, people and hostnames you never want published, comma-separated. The checks fail any post or diagram that contains one. It stays private to the repo's secrets.
 
-### 5. Local commands for Claude Code
+### 5. Local commands
 
 ```
 bash local/install.sh

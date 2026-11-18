@@ -22,7 +22,7 @@ for folder in "$@"; do
   fi
   echo "render $src -> $out"
   set +e
-  docker run --rm -v "$PWD:/data" -w /data -e DRAWIO_DISABLE_UPDATE=true "$IMAGE" "${args[@]}"
+  docker run --rm -v "$PWD:/data" -w /data -e DRAWIO_DISABLE_UPDATE=true -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=180s "$IMAGE" "${args[@]}"
   rc=$?
   set -e
   echo "drawio exit code: $rc"
