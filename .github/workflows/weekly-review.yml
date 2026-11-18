@@ -12,6 +12,10 @@ permissions:
   issues: write
   id-token: write
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   review:
     runs-on: ubuntu-latest
