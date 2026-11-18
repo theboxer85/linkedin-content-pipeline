@@ -22,7 +22,10 @@ for folder in "$@"; do
   fi
   echo "render $src -> $out"
   set +e
-  docker run --rm -v "$PWD:/data" -w /data -e DRAWIO_DISABLE_UPDATE=true -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=180s "$IMAGE" "${args[@]}"
+  # draw.io Desktop must run as a non-root user with a writable HOME (required since v24.4.6).
+  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v /etc/passwd:/etc/passwd:ro \
+    -v "$PWD:/data" -w /data -e DRAWIO_DISABLE_UPDATE=true -e DRAWIO_DESKTOP_COMMAND_TIMEOUT=120s \
+    "$IMAGE" "${args[@]}"
   rc=$?
   set -e
   echo "drawio exit code: $rc"
