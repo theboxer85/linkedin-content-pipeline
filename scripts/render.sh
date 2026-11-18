@@ -18,7 +18,7 @@ for folder in "$@"; do
     args=(-x -f pdf -a -o "/data/$out" "/data/$src")
   else
     out="$folder/diagram.png"
-    args=(-x -f png -p 0 --border 40 -s 1 -o "/data/$out" "/data/$src")
+    args=(-x -f png --border 40 -s 1 -o "/data/$out" "/data/$src")
   fi
   echo "render $src -> $out"
   docker run --rm -v "$PWD:/data" -w /data "$IMAGE" "${args[@]}"
